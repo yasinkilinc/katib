@@ -1,0 +1,74 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "MCP Tool List Response",
+    "description": "Response containing available tools from a Tool Server",
+    "type": "object",
+    "properties": {
+        "jsonrpc": {
+            "type": "string",
+            "const": "2.0"
+        },
+        "id": {
+            "type": "string"
+        },
+        "result": {
+            "type": "object",
+            "properties": {
+                "tools": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "Unique tool identifier"
+                            },
+                            "description": {
+                                "type": "string",
+                                "description": "Human-readable description"
+                            },
+                            "inputSchema": {
+                                "type": "object",
+                                "description": "JSON Schema for tool input"
+                            },
+                            "outputSchema": {
+                                "type": "object",
+                                "description": "JSON Schema for tool output"
+                            },
+                            "metadata": {
+                                "type": "object",
+                                "properties": {
+                                    "fallback": {
+                                        "type": "boolean",
+                                        "default": false
+                                    },
+                                    "unsafe": {
+                                        "type": "boolean",
+                                        "default": false
+                                    },
+                                    "requiresConfirmation": {
+                                        "type": "boolean",
+                                        "default": false
+                                    }
+                                }
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "description",
+                            "inputSchema"
+                        ]
+                    }
+                }
+            },
+            "required": [
+                "tools"
+            ]
+        }
+    },
+    "required": [
+        "jsonrpc",
+        "id",
+        "result"
+    ]
+}

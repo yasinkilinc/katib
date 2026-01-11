@@ -1,0 +1,207 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Katib Execution Plan Schema",
+    "description": "Strict, deterministic schema for Katib Autonomous Agent Execution Plans.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "plan_id",
+        "intent_summary",
+        "confidence",
+        "requires_user_approval",
+        "global_risk_level",
+        "steps",
+        "failure_policy",
+        "metadata"
+    ],
+    "properties": {
+        "plan_id": {
+            "type": "string",
+            "description": "Unique identifier for the plan."
+        },
+        "intent_summary": {
+            "type": "string",
+            "description": "Short natural language summary of the intent."
+        },
+        "confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "Confidence score of the plan generation."
+        },
+        "requires_user_approval": {
+            "type": "boolean",
+            "description": "Whether the entire plan requires user approval before execution."
+        },
+        "global_risk_level": {
+            "$ref": "#/definitions/risk_level"
+        },
+        "steps": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/step"
+            },
+            "description": "Ordered list of execution steps."
+        },
+        "failure_policy": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "strategy",
+                "max_retries",
+                "log_failure_to_memory",
+                "block_future_similar_plans"
+            ],
+            "properties": {
+                "strategy": {
+                    "type": "string",
+                    "enum": [
+                        "FAIL_FAST",
+                        "STEP_ROLLBACK"
+                    ]
+                },
+                "max_retries": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "log_failure_to_memory": {
+                    "type": "boolean"
+                },
+                "block_future_similar_plans": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "metadata": {
+            "type": "object",
+            "description": "Additional metadata (e.g., timestamps, source)."
+        }
+    },
+    "definitions": {
+        "step": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "step_id",
+                "description",
+                "executor",
+                "action",
+                "parameters",
+                "risk_level",
+                "requires_approval",
+                "preconditions",
+                "rollback",
+                "timeout_seconds",
+                "on_failure"
+            ],
+            "properties": {
+                "step_id": {
+                    "type": "string",
+                    "description": "Sequential identifier for the step."
+                },
+                "description": {
+                    "type": "string"
+                },
+                "executor": {
+                    "$ref": "#/definitions/executor_type"
+                },
+                "action": {
+                    "type": "string",
+                    "description": "Allowlist-compatible action name."
+                },
+                "parameters": {
+                    "type": "object",
+                    "description": "Executor-specific parameters."
+                },
+                "risk_level": {
+                    "$ref": "#/definitions/risk_level"
+                },
+                "requires_approval": {
+                    "type": "boolean"
+                },
+                "preconditions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "rollback": {
+                    "anyOf": [
+                        {
+                            "type": "null"
+                        },
+                        {
+                            "$ref": "#/definitions/rollback_object"
+                        }
+                    ]
+                },
+                "timeout_seconds": {
+                    "type": "integer"
+                },
+                "on_failure": {
+                    "type": "string",
+                    "enum": [
+                        "ABORT",
+                        "CONTINUE",
+                        "ROLLBACK"
+                    ]
+                }
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "risk_level": {
+                                "const": "CRITICAL"
+                            }
+                        }
+                    },
+                    "then": {
+                        "properties": {
+                            "requires_approval": {
+                                "const": true"
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "rollback_object": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "executor",
+                "action",
+                "parameters"
+            ],
+            "properties": {
+                "executor": {
+                    "$ref": "#/definitions/executor_type"
+                },
+                "action": {
+                    "type": "string"
+                },
+                "parameters": {
+                    "type": "object"
+                }
+            }
+        },
+        "executor_type": {
+            "type": "string",
+            "enum": [
+                "MACOS_EXECUTOR",
+                "TERMINAL_EXECUTOR",
+                "WINDSURF_EXECUTOR"
+            ]
+        },
+        "risk_level": {
+            "type": "string",
+            "enum": [
+                "LOW",
+                "MEDIUM",
+                "HIGH",
+                "CRITICAL"
+            ]
+        }
+    }
+}

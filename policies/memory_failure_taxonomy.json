@@ -1,0 +1,58 @@
+{
+    "taxonomy": {
+        "SECURITY": {
+            "severity": "CRITICAL",
+            "retryable": false,
+            "escalation_level": "BLOCK",
+            "similarity_keys": [
+                "failure_code",
+                "action"
+            ]
+        },
+        "SANDBOX": {
+            "severity": "HIGH",
+            "retryable": false,
+            "escalation_level": "BLOCK",
+            "similarity_keys": [
+                "failure_code",
+                "params"
+            ]
+        },
+        "PERMISSION": {
+            "severity": "HIGH",
+            "retryable": false,
+            "escalation_level": "FLAG",
+            "similarity_keys": [
+                "failure_code",
+                "executor"
+            ]
+        },
+        "EXECUTION": {
+            "severity": "MEDIUM",
+            "retryable": true,
+            "escalation_level": "WARN",
+            "similarity_keys": [
+                "failure_code",
+                "executor",
+                "action"
+            ]
+        },
+        "LLM": {
+            "severity": "LOW",
+            "retryable": true,
+            "escalation_level": "LOG",
+            "similarity_keys": [
+                "failure_code"
+            ]
+        },
+        "LOGIC": {
+            "severity": "MEDIUM",
+            "retryable": true,
+            "escalation_level": "WARN",
+            "similarity_keys": [
+                "failure_code",
+                "step_id"
+            ]
+        }
+    }
+}

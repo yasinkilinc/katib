@@ -1,0 +1,120 @@
+{
+    "mappings": {
+        "list_directory": {
+            "command": "ls",
+            "risk_level": "LOW",
+            "allowed_executors": [
+                "TERMINAL_EXECUTOR"
+            ],
+            "requires_approval": false,
+            "rollback_required": false,
+            "parameter_mapping": {
+                "path": "TARGET_PATH"
+            }
+        },
+        "read_file": {
+            "command": "cat",
+            "risk_level": "LOW",
+            "allowed_executors": [
+                "TERMINAL_EXECUTOR"
+            ],
+            "requires_approval": false,
+            "rollback_required": false,
+            "parameter_mapping": {
+                "file_path": "TARGET_FILE"
+            }
+        },
+        "search_code": {
+            "command": "grep",
+            "risk_level": "LOW",
+            "allowed_executors": [
+                "TERMINAL_EXECUTOR"
+            ],
+            "requires_approval": false,
+            "rollback_required": false,
+            "parameter_mapping": {
+                "pattern": "SEARCH_PATTERN",
+                "path": "TARGET_PATH"
+            }
+        },
+        "run_tests": {
+            "command": "npm test",
+            "risk_level": "MEDIUM",
+            "allowed_executors": [
+                "TERMINAL_EXECUTOR"
+            ],
+            "requires_approval": false,
+            "rollback_required": false,
+            "validation_rules": {
+                "must_be_npm_project": true
+            }
+        },
+        "git_status": {
+            "command": "git status",
+            "risk_level": "LOW",
+            "allowed_executors": [
+                "TERMINAL_EXECUTOR"
+            ],
+            "requires_approval": false,
+            "rollback_required": false
+        },
+        "git_commit": {
+            "command": "git commit",
+            "risk_level": "MEDIUM",
+            "allowed_executors": [
+                "TERMINAL_EXECUTOR"
+            ],
+            "requires_approval": true,
+            "rollback_required": true,
+            "rollback_action": "git_reset_soft",
+            "parameter_mapping": {
+                "message": "COMMIT_MESSAGE"
+            }
+        },
+        "install_dependencies": {
+            "command": "npm install",
+            "risk_level": "MEDIUM",
+            "allowed_executors": [
+                "TERMINAL_EXECUTOR"
+            ],
+            "requires_approval": true,
+            "rollback_required": true,
+            "rollback_action": "restore_package_lock",
+            "validation_rules": {
+                "network_access": "REQUIRED"
+            }
+        },
+        "python_script": {
+            "command": "python3",
+            "risk_level": "HIGH",
+            "allowed_executors": [
+                "TERMINAL_EXECUTOR"
+            ],
+            "requires_approval": true,
+            "rollback_required": false,
+            "parameter_mapping": {
+                "file": "SCRIPT_PATH"
+            }
+        }
+    },
+    "forbidden_mappings": [
+        {
+            "pattern": "recursive_delete",
+            "reason": "Too destructive for automated terminal agent"
+        },
+        {
+            "pattern": "system_update",
+            "reason": "OS level changes forbidden"
+        },
+        {
+            "pattern": "ssh_remote",
+            "reason": "Lateral movement forbidden"
+        }
+    ],
+    "failure_codes": {
+        "mapping_not_found": "PLAN_STEP_UNKNOWN",
+        "risk_too_high": "APPROVAL_REQUIRED_BUT_MISSING",
+        "parameter_mismatch": "INVALID_ARGUMENTS",
+        "validation_rule_failed": "POLICY_CONSTRAINT_VIOLATION"
+    }
+}

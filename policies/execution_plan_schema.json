@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Katib Execution Plan Schema",
+  "type": "object",
+  "required": [
+    "plan_id",
+    "intent",
+    "risk_level",
+    "approval_required",
+    "steps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "plan_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "intent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": [
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "CRITICAL"
+      ]
+    },
+    "approval_required": {
+      "type": "boolean"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "step_id",
+          "executor",
+          "action",
+          "params",
+          "risk",
+          "rollback",
+          "timeout_sec"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "step_id": {
+            "type": "string"
+          },
+          "executor": {
+            "type": "string",
+            "enum": [
+              "TERMINAL",
+              "MACOS",
+              "WINDSURF"
+            ]
+          },
+          "action": {
+            "type": "string"
+          },
+          "params": {
+            "type": "object"
+          },
+          "risk": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "CRITICAL"
+            ]
+          },
+          "rollback": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "params": {
+                "type": "object"
+              }
+            }
+          },
+          "timeout_sec": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}

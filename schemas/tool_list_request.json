@@ -1,0 +1,25 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "MCP Tool List Request",
+    "description": "Request to list available tools from a Tool Server",
+    "type": "object",
+    "properties": {
+        "jsonrpc": {
+            "type": "string",
+            "const": "2.0"
+        },
+        "method": {
+            "type": "string",
+            "const": "tool.list"
+        },
+        "id": {
+            "type": "string",
+            "description": "Unique request identifier"
+        }
+    },
+    "required": [
+        "jsonrpc",
+        "method",
+        "id"
+    ]
+}

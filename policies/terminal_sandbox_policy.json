@@ -1,0 +1,38 @@
+{
+    "allowlist": [
+        "ls",
+        "cd",
+        "pwd",
+        "echo",
+        "cat",
+        "grep",
+        "find",
+        "git",
+        "python3",
+        "npm",
+        "node",
+        "mkdir",
+        "touch"
+    ],
+    "forbidden_patterns": [
+        "rm -rf",
+        "sudo",
+        "curl | sh",
+        ":(){ :|:& };:",
+        "> /dev/",
+        "mkfs",
+        "dd if=",
+        "shutdown",
+        "reboot",
+        "chmod 777"
+    ],
+    "constraints": {
+        "max_runtime_sec": 30,
+        "max_output_bytes": 102400,
+        "allowed_working_dirs": [
+            "${WORKSPACE_ROOT}",
+            "/tmp/katib_sandbox"
+        ],
+        "network_access": "RESTRICTED"
+    }
+}

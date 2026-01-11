@@ -1,0 +1,56 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "MCP Tool Result Response",
+    "description": "Response from tool execution",
+    "type": "object",
+    "properties": {
+        "jsonrpc": {
+            "type": "string",
+            "const": "2.0"
+        },
+        "id": {
+            "type": "string"
+        },
+        "result": {
+            "type": "object",
+            "properties": {
+                "success": {
+                    "type": "boolean"
+                },
+                "output": {
+                    "description": "Tool-specific output data"
+                },
+                "error": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "description": "Error message if failed"
+                },
+                "metadata": {
+                    "type": "object",
+                    "properties": {
+                        "executionTimeMs": {
+                            "type": "number"
+                        },
+                        "toolName": {
+                            "type": "string"
+                        },
+                        "timestamp": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                }
+            },
+            "required": [
+                "success"
+            ]
+        }
+    },
+    "required": [
+        "jsonrpc",
+        "id",
+        "result"
+    ]
+}
