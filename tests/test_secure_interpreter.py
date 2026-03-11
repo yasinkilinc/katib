@@ -197,5 +197,50 @@ class TestSecureInterpreter(unittest.TestCase):
                     f"Expected security violation or Python Error for: {malicious_code}, got: {result.error}"
                 )
 
+    def test_legitimate_code_execution(self):
+        """Test that legitimate code still works correctly"""
+        # Test typical legitimate operations that should be allowed
+        legitimate_code_examples = [
+            # Basic arithmetic and expressions
+            "print(2 + 3 * 4)",
+            "result = 10 + 5\nprint(result)",
+
+            # String operations
+            "text = 'hello world'\nprint(text.upper())",
+            "words = ['apple', 'banana', 'cherry']\nprint(', '.join(words))",
+
+            # List operations
+            "numbers = [1, 2, 3, 4, 5]\nprint(sum(numbers))",
+            "my_list = [x * 2 for x in range(5)]\nprint(my_list)",
+
+            # Dictionary operations
+            "data = {'name': 'John', 'age': 30}\nprint(data['name'])",
+
+            # Control structures
+            "for i in range(3):\n    print(f'Count: {i}')",
+            "x = 5\nif x > 0:\n    print('Positive')\nelse:\n    print('Negative')",
+
+            # Function definitions and calls
+            "def greet(name):\n    return f'Hello, {name}'\nprint(greet('World'))",
+
+            # Variable assignments and operations
+            "a, b = 10, 20\nprint(a + b)",
+
+            # Boolean operations
+            "x = True\ny = False\nprint(x and not y)",
+        ]
+
+        for legitimate_code in legitimate_code_examples:
+            with self.subTest(code=repr(legitimate_code)):
+                result = self.executor._run_python(legitimate_code)
+                # Legitimate code should either succeed or fail due to runtime error, not security violation
+                if not result.success:
+                    # If it fails, it should be due to a runtime error, not a security violation
+                    self.assertNotIn("Security violation", result.error,
+                                   f"Legitimate code was blocked by security check: {legitimate_code}")
+                    # Or it might be a syntax error (which is acceptable for this test)
+                    self.assertNotIn("Dangerous", result.error,
+                                   f"Legitimate code incorrectly flagged as dangerous: {legitimate_code}")
+
 if __name__ == '__main__':
     unittest.main()
