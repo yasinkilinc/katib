@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "004-insecure-python-code-execution-with-eval-exec",
+  "state": "planning",
+  "subtasks": {
+    "completed": 0,
+    "total": 0,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Security Analysis",
+    "id": null,
+    "total": 1
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 2,
+    "started_at": "2026-03-11T23:17:55.481009"
+  },
+  "last_update": "2026-03-11T23:21:11.501677"
+}
