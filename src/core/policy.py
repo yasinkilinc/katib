@@ -81,16 +81,21 @@ class PolicyEngine:
             # In strict mode, everything above Read-Only requires confirmation
             if level.value > 0:
                 return PolicyDecision.REQUIRE_CONFIRMATION
-                
+
+        # In non-strict mode: READ_ONLY and LOW_RISK are auto-allowed
+        # SENSITIVE and HIGH_RISK require confirmation
         if level == PermissionLevel.READ_ONLY:
             return PolicyDecision.ALLOW
         elif level == PermissionLevel.LOW_RISK:
-            return PolicyDecision.REQUIRE_CONFIRMATION
+            if not self.strict_mode:
+                return PolicyDecision.ALLOW
+            else:
+                return PolicyDecision.REQUIRE_CONFIRMATION
         elif level == PermissionLevel.SENSITIVE:
             return PolicyDecision.REQUIRE_CONFIRMATION
         elif level == PermissionLevel.HIGH_RISK:
             return PolicyDecision.REQUIRE_CONFIRMATION
-        
+
         return PolicyDecision.REQUIRE_CONFIRMATION
 
     def set_strict_mode(self, enabled: bool):
