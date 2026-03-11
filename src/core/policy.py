@@ -85,10 +85,10 @@ class PolicyEngine:
         if level == PermissionLevel.READ_ONLY:
             return PolicyDecision.ALLOW
         elif level == PermissionLevel.LOW_RISK:
-            return PolicyDecision.ALLOW
+            return PolicyDecision.REQUIRE_CONFIRMATION
         elif level == PermissionLevel.SENSITIVE:
             # Ideally log/notify here, but decision is ALLOW
-            return PolicyDecision.ALLOW 
+            return PolicyDecision.ALLOW
         elif level == PermissionLevel.HIGH_RISK:
             return PolicyDecision.REQUIRE_CONFIRMATION
         
