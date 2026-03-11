@@ -156,6 +156,9 @@ class MemoryEngine:
         """
         Records the full cycle: Command -> Plan -> Execution Result
         """
+        # Detect sensitive data in the outcome before sanitizing
+        detections = self.detect_sensitive_data(outcome)
+
         # Sanitize the outcome before recording
         sanitized_outcome = self.sanitize_data(outcome)
 
@@ -166,7 +169,9 @@ class MemoryEngine:
             "plan": sanitized_outcome.get("plan"),
             "results": sanitized_outcome.get("actions"), # List of capability request/result
             "success": sanitized_outcome.get("success"),
-            "error": sanitized_outcome.get("error")
+            "error": sanitized_outcome.get("error"),
+            "sensitive_data_detected": len(detections) > 0,
+            "detection_summary": detections[:10]  # Limit to first 10 detections for performance
         }
 
         self.history.append(entry)
@@ -175,6 +180,10 @@ class MemoryEngine:
             self.history = self.history[-1000:]
 
         self._save()
+
+        # Log to audit trail if sensitive data was detected
+        if detections:
+            self.audit_log(outcome, source="record_execution")
 
     def get_recent_context(self, limit=5):
         return self.history[-limit:]
