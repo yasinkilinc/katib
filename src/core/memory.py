@@ -4,25 +4,34 @@ import time
 import re
 from typing import Dict, Any, Union
 
+from src.utils.secure_storage import SecureStorage
+
 class MemoryEngine:
-    def __init__(self, storage_path="memory.json"):
+    def __init__(self, storage_path="memory.json", encryption_key=None):
         self.storage_path = storage_path
         self.history = []
+        self.secure_storage = SecureStorage(encryption_key)
         self._load()
 
     def _load(self):
         if os.path.exists(self.storage_path):
             try:
                 with open(self.storage_path, 'r') as f:
-                    self.history = json.load(f)
-            except:
+                    encrypted_data = f.read()
+                # Decrypt the data
+                decrypted_data = self.secure_storage.decrypt_data(encrypted_data)
+                self.history = decrypted_data
+            except Exception:
+                # If decryption fails, initialize with empty history
                 self.history = []
 
     def _save(self):
         # Sanitize data before saving
         sanitized_history = self.sanitize_data(self.history)
+        # Encrypt the data before saving
+        encrypted_data = self.secure_storage.encrypt_data(sanitized_history)
         with open(self.storage_path, 'w') as f:
-            json.dump(sanitized_history, f, indent=2)
+            f.write(encrypted_data)
 
     def _sanitize_value(self, value: str) -> str:
         """
@@ -202,13 +211,16 @@ class MemoryEngine:
                 "sanitized_data": self.sanitize_data(data)
             }
 
-            # Save audit log separately from main memory
+            # Save audit log separately from main memory with encryption
             audit_path = "audit_log.json"
             audit_history = []
             if os.path.exists(audit_path):
                 try:
                     with open(audit_path, 'r') as f:
-                        audit_history = json.load(f)
+                        encrypted_audit_data = f.read()
+                    # Decrypt the audit data
+                    decrypted_audit_data = self.secure_storage.decrypt_data(encrypted_audit_data)
+                    audit_history = decrypted_audit_data
                 except:
                     audit_history = []
 
@@ -217,7 +229,9 @@ class MemoryEngine:
             if len(audit_history) > 500:
                 audit_history = audit_history[-500:]
 
+            # Encrypt the audit history before saving
+            encrypted_audit_history = self.secure_storage.encrypt_data(audit_history)
             with open(audit_path, 'w') as f:
-                json.dump(audit_history, f, indent=2)
+                f.write(encrypted_audit_history)
 
         return detections
