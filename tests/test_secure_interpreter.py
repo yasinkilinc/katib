@@ -153,5 +153,49 @@ class TestSecureInterpreter(unittest.TestCase):
         self.assertFalse(result.success)
         # Should be blocked by AST validation
 
+    def test_malicious_code_prevention(self):
+        """Test that various forms of malicious code are prevented"""
+        # Test multiple forms of dangerous code execution
+        malicious_attempts = [
+            # Code injection attempts
+            "eval('2+2')",
+            "exec('print(\"hello\")')",
+            "__import__('os').system('echo pwned')",
+
+            # File system access
+            "open('/etc/passwd', 'r').read()",
+            "import os; os.listdir('/')",
+
+            # Shell/command execution
+            "import subprocess; subprocess.run(['ls', '-la'])",
+            "import os; os.popen('whoami').read()",
+
+            # Dangerous attribute access
+            "[].__class__.__base__.__subclasses__()[100]().__class__.__init__.__globals__['sys'].modules['os'].system('echo test')",
+
+            # Import attempts of dangerous modules
+            "import subprocess",
+            "import os",
+            "import sys",
+
+            # Attempting to access dangerous methods
+            "getattr(__import__('os'), 'system')('echo dangerous')",
+
+            # Attempts to break out of restricted environment
+            "__builtins__['eval']",
+            "vars(__import__('os'))",
+        ]
+
+        for malicious_code in malicious_attempts:
+            with self.subTest(code=malicious_code):
+                result = self.executor._run_python(malicious_code)
+                self.assertFalse(result.success, f"Malicious code should be blocked: {malicious_code}")
+                self.assertIsNotNone(result.error, f"Error should be reported for: {malicious_code}")
+                # Check that the error contains appropriate security violation message
+                self.assertTrue(
+                    "Security violation" in result.error or "Python Error" in result.error,
+                    f"Expected security violation or Python Error for: {malicious_code}, got: {result.error}"
+                )
+
 if __name__ == '__main__':
     unittest.main()
