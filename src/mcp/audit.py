@@ -8,6 +8,7 @@ import re
 from typing import Optional, Dict, Any, Union
 from enum import Enum
 from .capabilities import CapabilityRequest, ExecutionResult
+from ..utils.secure_storage import SecureStorage
 
 class CapabilityStatus(Enum):
     ALLOWED = "allowed"
@@ -21,9 +22,15 @@ class AuditLogger:
     This is a natural byproduct of MCP - not an afterthought.
     """
 
-    def __init__(self, log_dir: str = "data/logs"):
+    def __init__(self, log_dir: str = "data/logs", use_secure_storage: bool = False):
         self.log_dir = log_dir
+        self.use_secure_storage = use_secure_storage
         self.log_file = os.path.join(log_dir, "audit.jsonl")
+
+        # Initialize secure storage if needed
+        if use_secure_storage:
+            self.secure_storage = SecureStorage()
+
         os.makedirs(log_dir, exist_ok=True)
 
         # Sensitive data patterns to detect
@@ -152,12 +159,42 @@ class AuditLogger:
         self._write(entry)
     
     def _write(self, entry: Dict[str, Any]):
-        """Append entry to JSONL file"""
+        """Append entry to JSONL file, optionally with encryption"""
         try:
-            with open(self.log_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            if self.use_secure_storage:
+                # Encrypt the entry before writing
+                encrypted_entry = self.secure_storage.encrypt_data(entry)
+                with open(self.log_file, "a", encoding="utf-8") as f:
+                    f.write(json.dumps({"encrypted": encrypted_entry}, ensure_ascii=False) + "\n")
+            else:
+                # Write normally (existing behavior)
+                with open(self.log_file, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception as e:
             print(f"[!] Audit log write failed: {e}")
+
+    def get_log_entries(self, decrypt: bool = False):
+        """Read log entries from the file, optionally decrypting them"""
+        entries = []
+        try:
+            if not os.path.exists(self.log_file):
+                return []
+
+            with open(self.log_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    entry = json.loads(line.strip())
+
+                    # If entry contains encrypted data and decryption is requested
+                    if "encrypted" in entry and decrypt and self.use_secure_storage:
+                        decrypted_data = self.secure_storage.decrypt_data(entry["encrypted"])
+                        entries.append(decrypted_data)
+                    else:
+                        entries.append(entry)
+
+            return entries
+        except Exception as e:
+            print(f"[!] Audit log read failed: {e}")
+            return []
     
     def get_recent_failures(self, capability: str, limit: int = 10) -> list:
         """Get recent failures for a specific capability (for policy decisions)"""
@@ -182,8 +219,8 @@ class AuditLogger:
 # Global singleton
 _audit_logger: Optional[AuditLogger] = None
 
-def get_audit_logger() -> AuditLogger:
+def get_audit_logger(use_secure_storage: bool = False) -> AuditLogger:
     global _audit_logger
     if _audit_logger is None:
-        _audit_logger = AuditLogger()
+        _audit_logger = AuditLogger(use_secure_storage=use_secure_storage)
     return _audit_logger
