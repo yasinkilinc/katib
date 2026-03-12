@@ -40,6 +40,7 @@ class PolicyEngine:
             # LEVEL 3: High Risk
             "interpreter.run_shell": PermissionLevel.HIGH_RISK,
             "interpreter.run_python": PermissionLevel.HIGH_RISK,
+            "terminal.run": PermissionLevel.HIGH_RISK,
             "system.lock": PermissionLevel.HIGH_RISK,
             "email.send": PermissionLevel.HIGH_RISK,
             "file.write": PermissionLevel.HIGH_RISK,
