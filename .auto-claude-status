@@ -3,13 +3,13 @@
   "spec": "001-reliable-voice-activity-detection",
   "state": "building",
   "subtasks": {
-    "completed": 1,
+    "completed": 2,
     "total": 4,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "VAD Integration",
+    "current": "Wake Word Detection",
     "id": null,
     "total": 1
   },
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 3,
+    "number": 4,
     "started_at": "2026-04-15T06:03:01.611487"
   },
-  "last_update": "2026-04-15T06:13:40.384640"
+  "last_update": "2026-04-15T06:17:28.991303"
 }

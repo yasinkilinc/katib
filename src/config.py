@@ -23,9 +23,12 @@ class Config:
     CHANNELS = 1
     CHUNK_DURATION_MS = 100 # Increased for smoother metrics
     SILENCE_THRESHOLD = 20.0 # Increased to ignore background noise (was 10.0)
-    
-    # Safety
-    
+
+    # Wake Word Settings
+    WAKE_WORD_ENABLED = os.getenv("WAKE_WORD_ENABLED", "false").lower() == "true"
+    WAKE_WORDS = os.getenv("WAKE_WORDS", "hey computer,computer").split(",")
+    WAKE_WORD_THRESHOLD = float(os.getenv("WAKE_WORD_THRESHOLD", "0.7"))
+
     # Safety
     REQUIRE_CONFIRMATION_THRESHOLD = "high"
     
