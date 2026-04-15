@@ -14,6 +14,13 @@ class MacOSExecutor(BaseExecutor):
                 return self._close_app(params.get("app_name"))
             elif action == "app.focus":
                 return self._activate_app(params.get("app_name"))
+            elif action == "app.launch_with_file":
+                return self._launch_app_with_file(
+                    params.get("app_name"),
+                    params.get("file_path")
+                )
+            elif action == "document.open":
+                return self._open_document(params.get("file_path"))
             elif action == "system.volume":
                 return self._set_volume(params.get("level"))
             elif action == "tts.speak":
@@ -30,9 +37,65 @@ class MacOSExecutor(BaseExecutor):
             return ExecutionResult(success=False, error=str(e))
 
     def _open_app(self, app_name: str) -> ExecutionResult:
-        if not app_name: return ExecutionResult(False, error="Missing app_name")
-        subprocess.run(["open", "-a", app_name])
-        return ExecutionResult(True, f"Opened {app_name}")
+        if not app_name:
+            return ExecutionResult(False, error="Missing app_name")
+
+        try:
+            # Check if app exists by attempting to find its path
+            result = subprocess.run(["mdfind", f"kMDItemCFBundleIdentifier == '{app_name}' || kMDItemDisplayName == '{app_name}'"],
+                                  capture_output=True, text=True)
+
+            if result.returncode == 0 and result.stdout.strip():
+                # App found by name or bundle ID, launch it
+                subprocess.run(["open", "-a", app_name])
+                return ExecutionResult(True, f"Successfully opened {app_name}")
+            else:
+                # Try with full path in case it's a full application path
+                result = subprocess.run(["open", "-a", app_name], capture_output=True, text=True)
+                if result.returncode == 0:
+                    return ExecutionResult(True, f"Successfully opened {app_name}")
+                else:
+                    return ExecutionResult(False, f"Could not find application: {app_name}")
+        except Exception as e:
+            return ExecutionResult(False, f"Failed to open {app_name}: {str(e)}")
+
+    def _launch_app_with_file(self, app_name: str, file_path: str) -> ExecutionResult:
+        """Launch an application with a specific file"""
+        if not app_name:
+            return ExecutionResult(False, error="Missing app_name")
+        if not file_path:
+            return ExecutionResult(False, error="Missing file_path")
+
+        # Verify the file exists
+        if not os.path.exists(file_path):
+            return ExecutionResult(False, error=f"File does not exist: {file_path}")
+
+        try:
+            result = subprocess.run(["open", "-a", app_name, file_path], capture_output=True, text=True)
+            if result.returncode == 0:
+                return ExecutionResult(True, f"Opened {file_path} with {app_name}")
+            else:
+                return ExecutionResult(False, f"Failed to open {file_path} with {app_name}: {result.stderr}")
+        except Exception as e:
+            return ExecutionResult(False, f"Failed to open {file_path} with {app_name}: {str(e)}")
+
+    def _open_document(self, file_path: str) -> ExecutionResult:
+        """Open a document using the default application"""
+        if not file_path:
+            return ExecutionResult(False, error="Missing file_path")
+
+        # Verify the file exists
+        if not os.path.exists(file_path):
+            return ExecutionResult(False, error=f"File does not exist: {file_path}")
+
+        try:
+            result = subprocess.run(["open", file_path], capture_output=True, text=True)
+            if result.returncode == 0:
+                return ExecutionResult(True, f"Opened document {file_path}")
+            else:
+                return ExecutionResult(False, f"Failed to open document {file_path}: {result.stderr}")
+        except Exception as e:
+            return ExecutionResult(False, f"Failed to open document {file_path}: {str(e)}")
 
     def _close_app(self, app_name: str) -> ExecutionResult:
         if not app_name: return ExecutionResult(False, error="Missing app_name")

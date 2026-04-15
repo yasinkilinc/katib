@@ -8,3 +8,6 @@ __pycache__/
 .env
 katib.log
 memory.json
+
+# Auto Claude data directory
+.auto-claude/
