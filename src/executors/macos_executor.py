@@ -60,20 +60,41 @@ class MacOSExecutor(BaseExecutor):
 
         try:
             # Check if app exists by attempting to find its path
-            result = subprocess.run(["mdfind", f"kMDItemCFBundleIdentifier == '{app_name}' || kMDItemDisplayName == '{app_name}'"],
+            # Also handle name changes (e.g., System Preferences -> System Settings)
+            search_name = app_name
+            if app_name == "System Preferences":
+                search_name = "System Settings"  # Modern macOS renamed this
+
+            # First, try to find the app using mdfind
+            result = subprocess.run(["mdfind", f"kMDItemCFBundleIdentifier == '{search_name}' || kMDItemDisplayName == '{search_name}'"],
                                   capture_output=True, text=True)
 
             if result.returncode == 0 and result.stdout.strip():
-                # App found by name or bundle ID, launch it
-                subprocess.run(["open", "-a", app_name])
-                return ExecutionResult(True, f"Successfully opened {app_name}")
+                # App found by name or bundle ID, get the path and launch it
+                app_path = result.stdout.strip().split('\n')[0]  # Take the first match
+                subprocess.run(["open", app_path])
+                return ExecutionResult(True, f"Successfully opened {search_name}")
             else:
-                # Try with full path in case it's a full application path
-                result = subprocess.run(["open", "-a", app_name], capture_output=True, text=True)
+                # If mdfind didn't find it, try using the open command directly with the app name
+                result = subprocess.run(["open", "-a", search_name], capture_output=True, text=True)
                 if result.returncode == 0:
-                    return ExecutionResult(True, f"Successfully opened {app_name}")
+                    return ExecutionResult(True, f"Successfully opened {search_name}")
                 else:
-                    return ExecutionResult(False, f"Could not find application: {app_name}")
+                    # If the above fails, try to search for the .app file in common locations
+                    app_search_name = f"{search_name}.app" if not search_name.endswith('.app') else search_name
+                    common_paths = [
+                        f"/Applications/{app_search_name}",
+                        f"/System/Applications/{app_search_name}",
+                        f"/Applications/Utilities/{app_search_name}",
+                        os.path.expanduser(f"~/Applications/{app_search_name}")
+                    ]
+
+                    for path in common_paths:
+                        if os.path.exists(path):
+                            subprocess.run(["open", path])
+                            return ExecutionResult(True, f"Successfully opened {search_name}")
+
+                    return ExecutionResult(False, f"Could not find application: {search_name}")
         except Exception as e:
             return ExecutionResult(False, f"Failed to open {app_name}: {str(e)}")
 
@@ -97,8 +118,9 @@ class MacOSExecutor(BaseExecutor):
         except Exception as e:
             return ExecutionResult(False, f"Failed to open {file_path} with {app_name}: {str(e)}")
 
+
     def _open_document(self, file_path: str) -> ExecutionResult:
-        """Open a document using the default application via AppleScript"""
+        """Open a document using the default application"""
         if not file_path:
             return ExecutionResult(False, error="Missing file_path")
 
@@ -107,29 +129,10 @@ class MacOSExecutor(BaseExecutor):
             return ExecutionResult(False, error=f"File does not exist: {file_path}")
 
         try:
-            # Convert file path to POSIX format for AppleScript
-            posix_path = os.path.abspath(file_path)
+            # Use the simple 'open' command to open with default application
+            result = subprocess.run(["open", file_path], capture_output=True, text=True)
 
-            # Use AppleScript to open the document with the default application
-            script = f'''
-            try
-                tell application "Finder"
-                    open POSIX file "{posix_path}"
-                end tell
-                return "success"
-            on error errorMessage
-                -- If Finder fails, try using the open command via AppleScript
-                try
-                    do shell script "open '{posix_path}'"
-                    return "success"
-                on error shell_error
-                    return "error: " & errorMessage & " | shell error: " & shell_error
-                end try
-            end try
-            '''
-
-            result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-            if result.returncode == 0 and "success" in result.stdout:
+            if result.returncode == 0:
                 return ExecutionResult(True, f"Opened document {file_path}")
             else:
                 error_msg = result.stderr if result.stderr else result.stdout
@@ -138,43 +141,130 @@ class MacOSExecutor(BaseExecutor):
             return ExecutionResult(False, f"Failed to open document {file_path}: {str(e)}")
 
     def _close_app(self, app_name: str) -> ExecutionResult:
-        if not app_name: return ExecutionResult(False, error="Missing app_name")
-        script = f'quit app "{app_name}"'
-        subprocess.run(["osascript", "-e", script])
-        return ExecutionResult(True, f"Closed {app_name}")
+        if not app_name:
+            return ExecutionResult(False, error="Missing app_name")
+
+        try:
+            script = f'''
+            try
+                tell application "{app_name}"
+                    quit
+                end tell
+                return "success"
+            on error errorMessage
+                return errorMessage
+            end try
+            '''
+
+            result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+
+            if "success" in result.stdout or result.returncode == 0:
+                return ExecutionResult(True, f"Closed {app_name}")
+            else:
+                # Check if the error is related to accessibility permissions
+                error_msg = result.stderr if result.stderr else result.stdout
+                if "not allowed assistive" in error_msg or "accessibility" in error_msg.lower() or "not authorized" in error_msg.lower():
+                    return ExecutionResult(False, f"Cannot close {app_name}: Accessibility permissions required. Please grant accessibility permissions for this application in System Preferences > Security & Privacy > Privacy > Accessibility.")
+
+                # Try alternate approach with 'quit app'
+                alt_script = f'quit app "{app_name}"'
+                alt_result = subprocess.run(["osascript", "-e", alt_script], capture_output=True, text=True)
+
+                if alt_result.returncode == 0:
+                    return ExecutionResult(True, f"Closed {app_name}")
+                else:
+                    # Check if the error is related to accessibility permissions
+                    alt_error_msg = alt_result.stderr if alt_result.stderr else alt_result.stdout
+                    if "not allowed assistive" in alt_error_msg or "accessibility" in alt_error_msg.lower() or "not authorized" in alt_error_msg.lower():
+                        return ExecutionResult(False, f"Cannot close {app_name}: Accessibility permissions required. Please grant accessibility permissions for this application in System Preferences > Security & Privacy > Privacy > Accessibility.")
+
+                    return ExecutionResult(False, f"Could not close {app_name}: {alt_error_msg}")
+
+        except Exception as e:
+            return ExecutionResult(False, f"Failed to close {app_name}: {str(e)}")
         
     def _activate_app(self, app_name: str) -> ExecutionResult:
-        if not app_name: return ExecutionResult(False, error="Missing app_name")
+        if not app_name:
+            return ExecutionResult(False, error="Missing app_name")
+
         script = f'''
         tell application "{app_name}"
             activate
         end tell
         '''
-        subprocess.run(["osascript", "-e", script])
-        return ExecutionResult(True, f"Focused {app_name}")
+        try:
+            result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+
+            if result.returncode == 0:
+                return ExecutionResult(True, f"Focused {app_name}")
+            else:
+                error_msg = result.stderr if result.stderr else result.stdout
+                if "not allowed assistive" in error_msg or "accessibility" in error_msg.lower() or "not authorized" in error_msg.lower():
+                    return ExecutionResult(False, f"Cannot focus {app_name}: Accessibility permissions required. Please grant accessibility permissions for this application in System Preferences > Security & Privacy > Privacy > Accessibility.")
+                else:
+                    return ExecutionResult(False, f"Failed to focus {app_name}: {error_msg}")
+        except Exception as e:
+            return ExecutionResult(False, f"Failed to focus {app_name}: {str(e)}")
 
     def _set_volume(self, level: int) -> ExecutionResult:
         # level 0-100
-        if level is None: return ExecutionResult(False, error="Missing level")
-        # macOS volume is 0-7 usually, or 0-100 output volume
-        vol = f"set volume output volume {level}"
-        subprocess.run(["osascript", "-e", vol])
-        return ExecutionResult(True, f"Volume set to {level}")
+        if level is None:
+            return ExecutionResult(False, error="Missing level")
+
+        # Validate the volume level
+        if not isinstance(level, int) or level < 0 or level > 100:
+            return ExecutionResult(False, error="Volume level must be an integer between 0 and 100")
+
+        try:
+            # macOS volume is 0-100 output volume
+            vol = f"set volume output volume {level}"
+            result = subprocess.run(["osascript", "-e", vol], capture_output=True, text=True)
+
+            if result.returncode == 0:
+                return ExecutionResult(True, f"Volume set to {level}")
+            else:
+                error_msg = result.stderr if result.stderr else result.stdout
+                if "not allowed assistive" in error_msg or "accessibility" in error_msg.lower() or "not authorized" in error_msg.lower():
+                    return ExecutionResult(False, f"Cannot set volume: Accessibility permissions required. Please grant accessibility permissions for this application in System Preferences > Security & Privacy > Privacy > Accessibility.")
+                else:
+                    return ExecutionResult(False, f"Failed to set volume to {level}: {error_msg}")
+        except Exception as e:
+            return ExecutionResult(False, f"Failed to set volume to {level}: {str(e)}")
 
     def _speak(self, text: str) -> ExecutionResult:
-        if not text: return ExecutionResult(False, error="Missing text")
-        subprocess.run(["say", text])
-        return ExecutionResult(True, "Spoken")
+        if not text:
+            return ExecutionResult(False, error="Missing text")
+
+        try:
+            result = subprocess.run(["say", text], capture_output=True, text=True)
+            if result.returncode == 0:
+                return ExecutionResult(True, "Spoken")
+            else:
+                error_msg = result.stderr if result.stderr else result.stdout
+                return ExecutionResult(False, f"Failed to speak text: {error_msg}")
+        except Exception as e:
+            return ExecutionResult(False, f"Failed to speak text: {str(e)}")
 
     def _open_url(self, url: str) -> ExecutionResult:
-        if not url: return ExecutionResult(False, error="Missing url")
-        if not url.startswith("http"): url = "https://" + url
-        subprocess.run(["open", url])
-        return ExecutionResult(True, f"Opened {url}")
+        if not url:
+            return ExecutionResult(False, error="Missing url")
+        if not url.startswith("http"):
+            url = "https://" + url
+
+        try:
+            result = subprocess.run(["open", url], capture_output=True, text=True)
+            if result.returncode == 0:
+                return ExecutionResult(True, f"Opened {url}")
+            else:
+                error_msg = result.stderr if result.stderr else result.stdout
+                return ExecutionResult(False, f"Failed to open {url}: {error_msg}")
+        except Exception as e:
+            return ExecutionResult(False, f"Failed to open {url}: {str(e)}")
         
     def _close_browser_tab(self, title_match: str) -> ExecutionResult:
-        if not title_match: return ExecutionResult(False, error="Missing title_match")
-        
+        if not title_match:
+            return ExecutionResult(False, error="Missing title_match")
+
         # Try Chrome first (since user specifically uses it)
         chrome_script = f'''
         tell application "Google Chrome"
@@ -190,7 +280,7 @@ class MacOSExecutor(BaseExecutor):
             end repeat
         end tell
         '''
-        
+
         # Try Safari if Chrome script fails or returns nothing relevant
         safari_script = f'''
         tell application "Safari"
@@ -208,11 +298,21 @@ class MacOSExecutor(BaseExecutor):
         try:
             # Attempt Chrome
             res = subprocess.run(["osascript", "-e", chrome_script], capture_output=True, text=True)
+
+            # Check if error is related to accessibility permissions
+            if "not allowed assistive" in res.stderr or "accessibility" in res.stderr.lower() or "not authorized" in res.stderr.lower():
+                return ExecutionResult(False, f"Cannot close browser tab: Accessibility permissions required for Chrome. Please grant accessibility permissions for Chrome in System Preferences > Security & Privacy > Privacy > Accessibility.")
+
             if "closed" in res.stdout:
                 return ExecutionResult(True, f"Closed Chrome tab matching '{title_match}'")
 
             # Attempt Safari
             res = subprocess.run(["osascript", "-e", safari_script], capture_output=True, text=True)
+
+            # Check if error is related to accessibility permissions
+            if "not allowed assistive" in res.stderr or "accessibility" in res.stderr.lower() or "not authorized" in res.stderr.lower():
+                return ExecutionResult(False, f"Cannot close browser tab: Accessibility permissions required for Safari. Please grant accessibility permissions for Safari in System Preferences > Security & Privacy > Privacy > Accessibility.")
+
             if "closed" in res.stdout:
                 return ExecutionResult(True, f"Closed Safari tab matching '{title_match}'")
 
@@ -283,12 +383,17 @@ class MacOSExecutor(BaseExecutor):
             return ExecutionResult(False, error="Missing app_name")
 
         try:
+            # Handle name changes (e.g., System Preferences -> System Settings)
+            search_name = app_name
+            if app_name == "System Preferences":
+                search_name = "System Settings"  # Modern macOS renamed this
+
             # If app_name doesn't end with .app, add it
-            search_name = app_name if app_name.endswith('.app') else f"{app_name}.app"
+            search_name_formatted = search_name if search_name.endswith('.app') else f"{search_name}.app"
 
             # Find the app using mdfind
             find_result = subprocess.run(
-                ["mdfind", f"kMDItemDisplayName == '{app_name}' || kMDItemCFBundleIdentifier == '{app_name}'"],
+                ["mdfind", f"kMDItemDisplayName == '{search_name}' || kMDItemCFBundleIdentifier == '{search_name}'"],
                 capture_output=True,
                 text=True
             )
@@ -298,10 +403,10 @@ class MacOSExecutor(BaseExecutor):
             else:
                 # If not found by name, try looking in standard locations
                 standard_locations = [
-                    f"/Applications/{search_name}",
-                    f"/System/Applications/{search_name}",
-                    f"/Applications/Utilities/{search_name}",
-                    os.path.expanduser(f"~/Applications/{search_name}")
+                    f"/Applications/{search_name_formatted}",
+                    f"/System/Applications/{search_name_formatted}",
+                    f"/Applications/Utilities/{search_name_formatted}",
+                    os.path.expanduser(f"~/Applications/{search_name_formatted}")
                 ]
 
                 app_path = None
@@ -421,32 +526,52 @@ class MacOSExecutor(BaseExecutor):
             return ExecutionResult(False, error="Missing app_name")
 
         try:
-            # First check if the app is currently running
+            # Check if the app is currently running
             check_running = f'''
-            tell application "System Events"
-                return name of every application process whose visible is true
-            end tell
+            try
+                tell application "System Events"
+                    set appName to "{app_name}"
+                    set isRunning to (name of every process) contains appName
+                    return isRunning
+                end tell
+            on error
+                return false
+            end try
             '''
 
             result = subprocess.run(["osascript", "-e", check_running], capture_output=True, text=True)
 
-            if app_name not in result.stdout:
-                # If the app is not currently visible/running, use activate to bring it to front
-                script = f'''
-                tell application "{app_name}"
-                    activate
-                end tell
-                '''
-            else:
-                # If app is running, switch to it by activating
-                script = f'''
-                tell application "{app_name}"
-                    activate
-                end tell
-                '''
+            if result.returncode != 0 or "false" in result.stdout.lower():
+                # If the app is not running, try to launch it first
+                launch_result = self._open_app(app_name)
+                if not launch_result.success:
+                    return ExecutionResult(False, f"App '{app_name}' is not running and failed to launch: {launch_result.error}")
 
-            subprocess.run(["osascript", "-e", script])
-            return ExecutionResult(True, f"Switched to {app_name}")
+                # Wait a moment for the app to launch
+                time.sleep(1)
+
+            # Activate the app (bring to front regardless of whether it was running)
+            script = f'''
+            try
+                tell application "{app_name}"
+                    activate
+                end tell
+                return "success"
+            on error errorMessage
+                return errorMessage
+            end try
+            '''
+
+            activate_result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+
+            if "success" in activate_result.stdout:
+                return ExecutionResult(True, f"Switched to {app_name}")
+            else:
+                error_msg = activate_result.stderr if activate_result.stderr else activate_result.stdout
+                if "not allowed assistive" in error_msg or "accessibility" in error_msg.lower() or "not authorized" in error_msg.lower():
+                    return ExecutionResult(False, f"Cannot switch to {app_name}: Accessibility permissions required. Please grant accessibility permissions for this application in System Preferences > Security & Privacy > Privacy > Accessibility.")
+                else:
+                    return ExecutionResult(False, f"Failed to switch to {app_name}: activation failed - {error_msg}")
 
         except Exception as e:
             return ExecutionResult(False, f"Failed to switch to {app_name}: {str(e)}")
@@ -454,48 +579,55 @@ class MacOSExecutor(BaseExecutor):
     def _cycle_apps(self) -> ExecutionResult:
         """Cycle through running applications, typically using cmd+tab equivalent"""
         try:
-            # Get list of running applications
-            get_frontmost = '''
-            tell application "System Events"
-                set frontApp to name of first application process whose frontmost is true
-                set runningApps to name of every application process whose background only is false
-            end tell
+            # Get list of running applications - use a more reliable approach
+            get_running = '''
+            try
+                tell application "System Events"
+                    set runningApps to name of every process whose background only is false
+                    set frontApp to name of first application process whose frontmost is true
+                    return {frontApp, runningApps}
+                end tell
+            on error errorMessage
+                return {"unknown", {}}
+            end try
             '''
 
-            result = subprocess.run(["osascript", "-e", get_frontmost], capture_output=True, text=True)
+            result = subprocess.run(["osascript", "-e", get_running], capture_output=True, text=True)
 
             if result.returncode != 0:
-                return ExecutionResult(False, f"Failed to get running applications: {result.stderr}")
+                error_msg = result.stderr if result.stderr else result.stdout
+                if "not allowed assistive" in error_msg or "accessibility" in error_msg.lower() or "not authorized" in error_msg.lower():
+                    return ExecutionResult(False, "App cycling failed: Accessibility permissions required. Please grant accessibility permissions for this application in System Preferences > Security & Privacy > Privacy > Accessibility.")
 
-            # Parse the result to get the frontmost app and other running apps
-            lines = result.stdout.strip().split('\n')
-            if not lines or len(lines) == 0:
-                return ExecutionResult(False, "No running applications found")
-
-            # For cycling apps, we'll simulate Cmd+Tab using AppleScript
-            # This brings up the app switcher and moves to the next app
+            # Simulate Cmd+Tab cycling - but with error handling
             cycle_script = '''
-            tell application "System Events"
-                key code 48 using {command down}  -- cmd+tab
-            end tell
+            try
+                tell application "System Events"
+                    key code 48 using {command down}
+                end tell
+                delay 0.2
+                tell application "System Events"
+                    key up command
+                end tell
+                return "success"
+            on error errorMessage
+                return errorMessage
+            end try
             '''
 
-            subprocess.run(["osascript", "-e", cycle_script])
-            time.sleep(0.2)  # Brief pause to allow the switch to occur
+            cycle_result = subprocess.run(["osascript", "-e", cycle_script], capture_output=True, text=True)
 
-            # Release the keys to complete the cycle
-            release_keys = '''
-            tell application "System Events"
-                key up command
-            end tell
-            '''
-
-            subprocess.run(["osascript", "-e", release_keys])
-
-            return ExecutionResult(True, "Cycled to next application")
+            if "success" in cycle_result.stdout:
+                return ExecutionResult(True, "Cycled to next application")
+            else:
+                error_msg = cycle_result.stderr if cycle_result.stderr else cycle_result.stdout
+                if "not allowed assistive" in error_msg or "accessibility" in error_msg.lower() or "not authorized" in error_msg.lower():
+                    return ExecutionResult(False, "App cycling failed: Accessibility permissions required. Please grant accessibility permissions for this application in System Preferences > Security & Privacy > Privacy > Accessibility.")
+                else:
+                    return ExecutionResult(True, f"App cycling attempted (may require accessibility permissions) - {error_msg}")
 
         except Exception as e:
-            return ExecutionResult(False, f"Failed to cycle applications: {str(e)}")
+            return ExecutionResult(False, f"Cycling apps failed: {str(e)}")
 
     def _list_processes(self) -> ExecutionResult:
         """List all running processes on the system"""
@@ -535,10 +667,35 @@ class MacOSExecutor(BaseExecutor):
                     data={"processes": processes}
                 )
             else:
-                return ExecutionResult(
-                    False,
-                    error=f"Failed to list processes: {result.stderr}"
-                )
+                # If ps fails due to permissions, try a simpler command
+                fallback_result = subprocess.run([
+                    "ps", "-eo", "pid,comm"
+                ], capture_output=True, text=True)
+
+                if fallback_result.returncode == 0:
+                    lines = fallback_result.stdout.strip().split('\n')
+                    processes = []
+
+                    for line in lines[1:]:
+                        if line.strip():
+                            parts = line.split(None, 1)
+                            if len(parts) >= 2:
+                                proc_info = {
+                                    'pid': int(parts[0]) if parts[0].isdigit() else 0,
+                                    'command': parts[1],
+                                    'full_command': parts[1]
+                                }
+                                processes.append(proc_info)
+
+                    return ExecutionResult(
+                        success=True,
+                        data={"processes": processes}
+                    )
+                else:
+                    return ExecutionResult(
+                        False,
+                        error=f"Failed to list processes: {result.stderr}"
+                    )
         except Exception as e:
             return ExecutionResult(False, error=f"Failed to list processes: {str(e)}")
 
@@ -649,7 +806,7 @@ class MacOSExecutor(BaseExecutor):
                     set isRunning to (name of every process) contains appName
                     return isRunning
                 end tell
-            on error
+            on error errorMessage
                 return false
             end try
             '''
@@ -670,6 +827,11 @@ class MacOSExecutor(BaseExecutor):
                     }
                 )
             else:
+                # Check if the error was related to accessibility permissions
+                error_msg = result.stderr if result.stderr else result.stdout
+                if "not allowed assistive" in error_msg or "accessibility" in error_msg.lower() or "not authorized" in error_msg.lower():
+                    return ExecutionResult(False, f"Cannot check if {app_name} is running: Accessibility permissions required. Please grant accessibility permissions for this application in System Preferences > Security & Privacy > Privacy > Accessibility.")
+
                 # If AppleScript fails, try using pgrep as a fallback
                 pgrep_result = subprocess.run(["pgrep", "-f", app_name], capture_output=True, text=True)
                 if pgrep_result.returncode == 0 and pgrep_result.stdout.strip():
@@ -704,7 +866,7 @@ class MacOSExecutor(BaseExecutor):
                     set isRunning to (name of every process) contains appName
                     return isRunning
                 end tell
-            on error
+            on error errorMessage
                 return false
             end try
             '''
@@ -721,7 +883,7 @@ class MacOSExecutor(BaseExecutor):
                         set isVisible to visible of appProcess
                         set isFrontmost to frontmost of appProcess
                         set appWindows to count of windows of appProcess
-                    on error
+                    on error errorMessage
                         set isVisible to missing value
                         set isFrontmost to missing value
                         set appWindows to 0
@@ -731,6 +893,11 @@ class MacOSExecutor(BaseExecutor):
                 '''
 
                 state_result = subprocess.run(["osascript", "-e", state_script], capture_output=True, text=True)
+
+                # Check if state retrieval had permission errors
+                state_error_msg = state_result.stderr if state_result.stderr else ""
+                if "not allowed assistive" in state_error_msg or "accessibility" in state_error_msg.lower() or "not authorized" in state_error_msg.lower():
+                    return ExecutionResult(False, f"Cannot get state for {app_name}: Accessibility permissions required. Please grant accessibility permissions for this application in System Preferences > Security & Privacy > Privacy > Accessibility.")
 
                 # Also get the process ID via pgrep for additional system-level information
                 pid_result = subprocess.run(["pgrep", "-f", app_name], capture_output=True, text=True)
@@ -787,6 +954,11 @@ class MacOSExecutor(BaseExecutor):
                     data={"app_state": app_state}
                 )
             else:
+                # Check if the error was related to accessibility permissions
+                error_msg = result.stderr if result.stderr else result.stdout
+                if "not allowed assistive" in error_msg or "accessibility" in error_msg.lower() or "not authorized" in error_msg.lower():
+                    return ExecutionResult(False, f"Cannot check app state for {app_name}: Accessibility permissions required. Please grant accessibility permissions for this application in System Preferences > Security & Privacy > Privacy > Accessibility.")
+
                 # App is not running
                 app_state = {
                     "app_name": app_name,
