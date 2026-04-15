@@ -39,6 +39,16 @@ class MacOSExecutor(BaseExecutor):
                 return self._switch_to_app(params.get("app_name"))
             elif action == "app.cycle":
                 return self._cycle_apps()
+            elif action == "process.list":
+                return self._list_processes()
+            elif action == "process.find":
+                return self._find_process(params.get("process_name"))
+            elif action == "process.kill":
+                return self._kill_process(params.get("pid", params.get("process_name")))
+            elif action == "app.running":
+                return self._is_app_running(params.get("app_name"))
+            elif action == "app.state":
+                return self._get_app_state(params.get("app_name"))
             else:
                  return ExecutionResult(success=False, error=f"Unknown MacOS action: {action}")
         except Exception as e:
@@ -464,3 +474,308 @@ class MacOSExecutor(BaseExecutor):
 
         except Exception as e:
             return ExecutionResult(False, f"Failed to cycle applications: {str(e)}")
+
+    def _list_processes(self) -> ExecutionResult:
+        """List all running processes on the system"""
+        try:
+            # Use ps command to get detailed process information
+            result = subprocess.run([
+                "ps", "-axo", "pid,ppid,uid,stat,pcpu,pmem,comm,command"
+            ], capture_output=True, text=True)
+
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                headers = lines[0].strip().split()
+                processes = []
+
+                for line in lines[1:]:
+                    if line.strip():
+                        parts = line.split(None, 7)  # Split into 8 parts maximum
+                        if len(parts) >= 8:
+                            try:
+                                proc_info = {
+                                    'pid': int(parts[0]) if parts[0].isdigit() else 0,
+                                    'ppid': int(parts[1]) if parts[1].isdigit() else 0,
+                                    'uid': int(parts[2]) if parts[2].isdigit() else 0,
+                                    'status': parts[3],
+                                    'cpu_percent': float(parts[4]) if parts[4] not in ['-', 'N/A'] else 0.0,
+                                    'mem_percent': float(parts[5]) if parts[5] not in ['-', 'N/A'] else 0.0,
+                                    'command': parts[6],
+                                    'full_command': parts[7]
+                                }
+                                processes.append(proc_info)
+                            except (ValueError, IndexError):
+                                # Skip malformed lines
+                                continue
+
+                return ExecutionResult(
+                    success=True,
+                    data={"processes": processes}
+                )
+            else:
+                return ExecutionResult(
+                    False,
+                    error=f"Failed to list processes: {result.stderr}"
+                )
+        except Exception as e:
+            return ExecutionResult(False, error=f"Failed to list processes: {str(e)}")
+
+    def _find_process(self, process_name: str) -> ExecutionResult:
+        """Find processes matching a specific name"""
+        if not process_name:
+            return ExecutionResult(False, error="Missing process_name")
+
+        try:
+            # Use pgrep to find processes by name
+            result = subprocess.run([
+                "pgrep", "-f", process_name
+            ], capture_output=True, text=True)
+
+            if result.returncode == 0 and result.stdout.strip():
+                pids = [pid.strip() for pid in result.stdout.split('\n') if pid.strip()]
+
+                # Get detailed info for each found process
+                detailed_processes = []
+                for pid_str in pids:
+                    if not pid_str.isdigit():
+                        continue
+
+                    pid = int(pid_str)
+
+                    # Get process info using ps
+                    ps_result = subprocess.run([
+                        "ps", "-o", "pid,ppid,uid,stat,pcpu,pmem,comm,command", "-p", str(pid)
+                    ], capture_output=True, text=True)
+
+                    if ps_result.returncode == 0:
+                        lines = ps_result.stdout.strip().split('\n')
+                        if len(lines) > 1:
+                            parts = lines[1].split(None, 7)  # Skip header, split command
+                            if len(parts) >= 8:
+                                try:
+                                    proc_info = {
+                                        'pid': int(parts[0]),
+                                        'ppid': int(parts[1]),
+                                        'uid': int(parts[2]),
+                                        'status': parts[3],
+                                        'cpu_percent': float(parts[4]) if parts[4] not in ['-', 'N/A'] else 0.0,
+                                        'mem_percent': float(parts[5]) if parts[5] not in ['-', 'N/A'] else 0.0,
+                                        'command': parts[6],
+                                        'full_command': parts[7]
+                                    }
+                                    detailed_processes.append(proc_info)
+                                except (ValueError, IndexError):
+                                    # Skip malformed lines
+                                    continue
+
+                return ExecutionResult(
+                    success=True,
+                    data={
+                        "process_name": process_name,
+                        "matches": detailed_processes
+                    }
+                )
+            else:
+                return ExecutionResult(
+                    True,
+                    data={
+                        "process_name": process_name,
+                        "matches": [],
+                        "message": f"No processes found matching '{process_name}'"
+                    }
+                )
+        except Exception as e:
+            return ExecutionResult(False, error=f"Failed to find process '{process_name}': {str(e)}")
+
+    def _kill_process(self, pid_or_name) -> ExecutionResult:
+        """Kill a process by PID or name"""
+        if not pid_or_name:
+            return ExecutionResult(False, error="Missing pid or process_name")
+
+        try:
+            # Determine if input is a PID (numeric) or process name
+            if isinstance(pid_or_name, str) and pid_or_name.isdigit():
+                pid = int(pid_or_name)
+                # Kill by PID
+                result = subprocess.run(["kill", str(pid)], capture_output=True, text=True)
+                if result.returncode == 0:
+                    return ExecutionResult(True, f"Process {pid} killed successfully")
+                else:
+                    return ExecutionResult(False, f"Failed to kill process {pid}: {result.stderr}")
+            else:
+                # Kill by process name
+                process_name = pid_or_name
+                result = subprocess.run(["pkill", "-f", process_name], capture_output=True, text=True)
+                if result.returncode == 0:
+                    return ExecutionResult(True, f"Process(es) matching '{process_name}' killed successfully")
+                else:
+                    return ExecutionResult(False, f"Failed to kill process matching '{process_name}': {result.stderr}")
+        except Exception as e:
+            return ExecutionResult(False, error=f"Failed to kill process: {str(e)}")
+
+    def _is_app_running(self, app_name: str) -> ExecutionResult:
+        """Check if a specific application is currently running"""
+        if not app_name:
+            return ExecutionResult(False, error="Missing app_name")
+
+        try:
+            # Use AppleScript to check if the application is running
+            script = f'''
+            try
+                tell application "System Events"
+                    set appName to "{app_name}"
+                    set isRunning to (name of every process) contains appName
+                    return isRunning
+                end tell
+            on error
+                return false
+            end try
+            '''
+
+            result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+
+            if result.returncode == 0:
+                output = result.stdout.strip()
+                is_running = "true" in output.lower()
+                status = "running" if is_running else "not running"
+
+                return ExecutionResult(
+                    success=True,
+                    data={
+                        "app_name": app_name,
+                        "is_running": is_running,
+                        "status": status
+                    }
+                )
+            else:
+                # If AppleScript fails, try using pgrep as a fallback
+                pgrep_result = subprocess.run(["pgrep", "-f", app_name], capture_output=True, text=True)
+                if pgrep_result.returncode == 0 and pgrep_result.stdout.strip():
+                    is_running = True
+                    status = "running"
+                else:
+                    is_running = False
+                    status = "not running"
+
+                return ExecutionResult(
+                    success=True,
+                    data={
+                        "app_name": app_name,
+                        "is_running": is_running,
+                        "status": status
+                    }
+                )
+        except Exception as e:
+            return ExecutionResult(False, error=f"Failed to check if app is running '{app_name}': {str(e)}")
+
+    def _get_app_state(self, app_name: str) -> ExecutionResult:
+        """Get detailed state information about a running application"""
+        if not app_name:
+            return ExecutionResult(False, error="Missing app_name")
+
+        try:
+            # First check if the app is running using the same approach as _is_app_running
+            script = f'''
+            try
+                tell application "System Events"
+                    set appName to "{app_name}"
+                    set isRunning to (name of every process) contains appName
+                    return isRunning
+                end tell
+            on error
+                return false
+            end try
+            '''
+
+            result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+
+            if result.returncode == 0 and "true" in result.stdout.lower():
+                # App is running, get detailed state info with proper error handling
+                state_script = f'''
+                try
+                    tell application "System Events"
+                        set appName to "{app_name}"
+                        set appProcess to process appName
+                        set isVisible to visible of appProcess
+                        set isFrontmost to frontmost of appProcess
+                        set appWindows to count of windows of appProcess
+                    on error
+                        set isVisible to missing value
+                        set isFrontmost to missing value
+                        set appWindows to 0
+                    end try
+                    return {{isVisible, isFrontmost, appWindows}}
+                end try
+                '''
+
+                state_result = subprocess.run(["osascript", "-e", state_script], capture_output=True, text=True)
+
+                # Also get the process ID via pgrep for additional system-level information
+                pid_result = subprocess.run(["pgrep", "-f", app_name], capture_output=True, text=True)
+                pid = None
+                if pid_result.returncode == 0 and pid_result.stdout.strip():
+                    try:
+                        pid = int(pid_result.stdout.strip().split()[0])
+                    except ValueError:
+                        pass
+
+                app_state = {
+                    "app_name": app_name,
+                    "is_running": True,
+                    "is_visible": None,
+                    "is_frontmost": None,
+                    "window_count": None,
+                    "pid": pid
+                }
+
+                # Parse the AppleScript result if successful
+                if state_result.returncode == 0 and state_result.stdout.strip():
+                    try:
+                        # Extract values from AppleScript result
+                        output = state_result.stdout.strip()
+                        # Output format is usually something like "true, false, 5"
+                        if "," in output:
+                            parts = output.split(",")
+                            if len(parts) >= 3:
+                                app_state["is_visible"] = "true" in parts[0].lower()
+                                app_state["is_frontmost"] = "true" in parts[1].lower()
+                                app_state["window_count"] = int(parts[2].strip()) if parts[2].strip().isdigit() else 0
+                    except:
+                        pass  # Use defaults if parsing fails
+
+                # Get process resource usage if PID is available
+                if pid:
+                    try:
+                        ps_result = subprocess.run([
+                            "ps", "-o", "pcpu,pmem", "-p", str(pid)
+                        ], capture_output=True, text=True)
+
+                        if ps_result.returncode == 0:
+                            lines = ps_result.stdout.strip().split('\n')
+                            if len(lines) > 1:
+                                cpu_mem = lines[1].split()
+                                if len(cpu_mem) >= 2:
+                                    app_state["cpu_percent"] = float(cpu_mem[0]) if cpu_mem[0] not in ['-', 'N/A'] else 0.0
+                                    app_state["memory_percent"] = float(cpu_mem[1]) if cpu_mem[1] not in ['-', 'N/A'] else 0.0
+                    except:
+                        pass  # Ignore PS errors
+
+                return ExecutionResult(
+                    success=True,
+                    data={"app_state": app_state}
+                )
+            else:
+                # App is not running
+                app_state = {
+                    "app_name": app_name,
+                    "is_running": False,
+                    "error": f"Application '{app_name}' is not currently running"
+                }
+
+                return ExecutionResult(
+                    success=False,
+                    data={"app_state": app_state}
+                )
+
+        except Exception as e:
+            return ExecutionResult(False, error=f"Failed to get app state for '{app_name}': {str(e)}")
