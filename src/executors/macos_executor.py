@@ -98,7 +98,7 @@ class MacOSExecutor(BaseExecutor):
             return ExecutionResult(False, f"Failed to open {file_path} with {app_name}: {str(e)}")
 
     def _open_document(self, file_path: str) -> ExecutionResult:
-        """Open a document using the default application"""
+        """Open a document using the default application via AppleScript"""
         if not file_path:
             return ExecutionResult(False, error="Missing file_path")
 
@@ -107,11 +107,33 @@ class MacOSExecutor(BaseExecutor):
             return ExecutionResult(False, error=f"File does not exist: {file_path}")
 
         try:
-            result = subprocess.run(["open", file_path], capture_output=True, text=True)
-            if result.returncode == 0:
+            # Convert file path to POSIX format for AppleScript
+            posix_path = os.path.abspath(file_path)
+
+            # Use AppleScript to open the document with the default application
+            script = f'''
+            try
+                tell application "Finder"
+                    open POSIX file "{posix_path}"
+                end tell
+                return "success"
+            on error errorMessage
+                -- If Finder fails, try using the open command via AppleScript
+                try
+                    do shell script "open '{posix_path}'"
+                    return "success"
+                on error shell_error
+                    return "error: " & errorMessage & " | shell error: " & shell_error
+                end try
+            end try
+            '''
+
+            result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+            if result.returncode == 0 and "success" in result.stdout:
                 return ExecutionResult(True, f"Opened document {file_path}")
             else:
-                return ExecutionResult(False, f"Failed to open document {file_path}: {result.stderr}")
+                error_msg = result.stderr if result.stderr else result.stdout
+                return ExecutionResult(False, f"Failed to open document {file_path}: {error_msg}")
         except Exception as e:
             return ExecutionResult(False, f"Failed to open document {file_path}: {str(e)}")
 

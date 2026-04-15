@@ -3,23 +3,23 @@
   "spec": "002-macos-application-control",
   "state": "building",
   "subtasks": {
-    "completed": 3,
+    "completed": 4,
     "total": 6,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Application Switching & Management",
+    "current": "Document Opening Support",
     "id": null,
-    "total": 2
+    "total": 1
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 5,
+    "number": 6,
     "started_at": "2026-04-15T06:02:59.546307"
   },
-  "last_update": "2026-04-15T06:12:50.347669"
+  "last_update": "2026-04-15T06:15:43.272604"
 }
