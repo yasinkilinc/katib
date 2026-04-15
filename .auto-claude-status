@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "001-reliable-voice-activity-detection",
+  "state": "planning",
+  "subtasks": {
+    "completed": 0,
+    "total": 0,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Audio Analysis",
+    "id": null,
+    "total": 1
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 2,
+    "started_at": "2026-04-15T06:03:01.611487"
+  },
+  "last_update": "2026-04-15T06:06:41.958027"
+}
