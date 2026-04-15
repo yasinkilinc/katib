@@ -35,6 +35,10 @@ class MacOSExecutor(BaseExecutor):
             elif action == "web.close_tab":
                  # Fallback attempt via AppleScript
                 return self._close_browser_tab(params.get("title_match"))
+            elif action == "app.switch":
+                return self._switch_to_app(params.get("app_name"))
+            elif action == "app.cycle":
+                return self._cycle_apps()
             else:
                  return ExecutionResult(success=False, error=f"Unknown MacOS action: {action}")
         except Exception as e:
@@ -378,3 +382,85 @@ class MacOSExecutor(BaseExecutor):
 
         except Exception as e:
             return ExecutionResult(False, error=f"Failed to get app info for '{app_name}': {str(e)}")
+
+    def _switch_to_app(self, app_name: str) -> ExecutionResult:
+        """Switch to an application, bringing it to the front"""
+        if not app_name:
+            return ExecutionResult(False, error="Missing app_name")
+
+        try:
+            # First check if the app is currently running
+            check_running = f'''
+            tell application "System Events"
+                return name of every application process whose visible is true
+            end tell
+            '''
+
+            result = subprocess.run(["osascript", "-e", check_running], capture_output=True, text=True)
+
+            if app_name not in result.stdout:
+                # If the app is not currently visible/running, use activate to bring it to front
+                script = f'''
+                tell application "{app_name}"
+                    activate
+                end tell
+                '''
+            else:
+                # If app is running, switch to it by activating
+                script = f'''
+                tell application "{app_name}"
+                    activate
+                end tell
+                '''
+
+            subprocess.run(["osascript", "-e", script])
+            return ExecutionResult(True, f"Switched to {app_name}")
+
+        except Exception as e:
+            return ExecutionResult(False, f"Failed to switch to {app_name}: {str(e)}")
+
+    def _cycle_apps(self) -> ExecutionResult:
+        """Cycle through running applications, typically using cmd+tab equivalent"""
+        try:
+            # Get list of running applications
+            get_frontmost = '''
+            tell application "System Events"
+                set frontApp to name of first application process whose frontmost is true
+                set runningApps to name of every application process whose background only is false
+            end tell
+            '''
+
+            result = subprocess.run(["osascript", "-e", get_frontmost], capture_output=True, text=True)
+
+            if result.returncode != 0:
+                return ExecutionResult(False, f"Failed to get running applications: {result.stderr}")
+
+            # Parse the result to get the frontmost app and other running apps
+            lines = result.stdout.strip().split('\n')
+            if not lines or len(lines) == 0:
+                return ExecutionResult(False, "No running applications found")
+
+            # For cycling apps, we'll simulate Cmd+Tab using AppleScript
+            # This brings up the app switcher and moves to the next app
+            cycle_script = '''
+            tell application "System Events"
+                key code 48 using {command down}  -- cmd+tab
+            end tell
+            '''
+
+            subprocess.run(["osascript", "-e", cycle_script])
+            time.sleep(0.2)  # Brief pause to allow the switch to occur
+
+            # Release the keys to complete the cycle
+            release_keys = '''
+            tell application "System Events"
+                key up command
+            end tell
+            '''
+
+            subprocess.run(["osascript", "-e", release_keys])
+
+            return ExecutionResult(True, "Cycled to next application")
+
+        except Exception as e:
+            return ExecutionResult(False, f"Failed to cycle applications: {str(e)}")
