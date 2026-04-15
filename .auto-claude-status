@@ -1,10 +1,10 @@
 {
   "active": true,
   "spec": "002-macos-application-control",
-  "state": "planning",
+  "state": "building",
   "subtasks": {
-    "completed": 0,
-    "total": 0,
+    "completed": 1,
+    "total": 6,
     "in_progress": 1,
     "failed": 0
   },
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 2,
+    "number": 3,
     "started_at": "2026-04-15T06:02:59.546307"
   },
-  "last_update": "2026-04-15T06:06:47.034510"
+  "last_update": "2026-04-15T06:08:04.422666"
 }

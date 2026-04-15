@@ -19,6 +19,10 @@ class MacOSExecutor(BaseExecutor):
                     params.get("app_name"),
                     params.get("file_path")
                 )
+            elif action == "app.list":
+                return self._list_apps()
+            elif action == "app.info":
+                return self._get_app_info(params.get("app_name"))
             elif action == "document.open":
                 return self._open_document(params.get("file_path"))
             elif action == "system.volume":
@@ -170,13 +174,207 @@ class MacOSExecutor(BaseExecutor):
             res = subprocess.run(["osascript", "-e", chrome_script], capture_output=True, text=True)
             if "closed" in res.stdout:
                 return ExecutionResult(True, f"Closed Chrome tab matching '{title_match}'")
-                
+
             # Attempt Safari
             res = subprocess.run(["osascript", "-e", safari_script], capture_output=True, text=True)
             if "closed" in res.stdout:
                 return ExecutionResult(True, f"Closed Safari tab matching '{title_match}'")
-                
+
             return ExecutionResult(False, f"No tab found matching '{title_match}' in Chrome or Safari")
-            
+
         except Exception as e:
              return ExecutionResult(False, f"Browser control failed: {str(e)}")
+
+    def _list_apps(self) -> ExecutionResult:
+        """List all installed applications on the system"""
+        try:
+            # Use mdfind to find all applications
+            result = subprocess.run(
+                ["mdfind", "kMDItemKind == 'Application'"],
+                capture_output=True,
+                text=True
+            )
+
+            if result.returncode == 0:
+                app_paths = [path.strip() for path in result.stdout.split('\n') if path.strip()]
+
+                # Alternative approach if mdfind returns no results - scan common directories
+                if not app_paths:
+                    import glob
+                    app_paths = []
+
+                    # Search in common application directories
+                    common_dirs = [
+                        "/Applications/*.app",
+                        "/System/Applications/*.app",
+                        "/Applications/Utilities/*.app",
+                        os.path.expanduser("~/Applications/*.app")
+                    ]
+
+                    for app_dir_pattern in common_dirs:
+                        app_paths.extend(glob.glob(app_dir_pattern))
+
+                    # Deduplicate
+                    app_paths = list(set(app_paths))
+
+                # Extract just the app names from the paths
+                app_names = []
+                for app_path in app_paths:
+                    app_name = os.path.basename(app_path)
+                    # Remove .app extension
+                    if app_name.endswith('.app'):
+                        app_name = app_name[:-4]
+                    app_names.append(app_name)
+
+                # Remove duplicates while preserving order
+                unique_apps = list(dict.fromkeys(app_names))
+
+                return ExecutionResult(
+                    success=True,
+                    data={"applications": unique_apps}
+                )
+            else:
+                return ExecutionResult(
+                    success=False,
+                    error=f"Failed to list applications: {result.stderr}"
+                )
+        except Exception as e:
+            return ExecutionResult(False, error=f"Failed to list applications: {str(e)}")
+
+    def _get_app_info(self, app_name: str) -> ExecutionResult:
+        """Get detailed information about a specific application"""
+        if not app_name:
+            return ExecutionResult(False, error="Missing app_name")
+
+        try:
+            # If app_name doesn't end with .app, add it
+            search_name = app_name if app_name.endswith('.app') else f"{app_name}.app"
+
+            # Find the app using mdfind
+            find_result = subprocess.run(
+                ["mdfind", f"kMDItemDisplayName == '{app_name}' || kMDItemCFBundleIdentifier == '{app_name}'"],
+                capture_output=True,
+                text=True
+            )
+
+            if find_result.returncode == 0 and find_result.stdout.strip():
+                app_path = find_result.stdout.strip().split('\n')[0]  # Take the first match
+            else:
+                # If not found by name, try looking in standard locations
+                standard_locations = [
+                    f"/Applications/{search_name}",
+                    f"/System/Applications/{search_name}",
+                    f"/Applications/Utilities/{search_name}",
+                    os.path.expanduser(f"~/Applications/{search_name}")
+                ]
+
+                app_path = None
+                for location in standard_locations:
+                    if os.path.exists(location):
+                        app_path = location
+                        break
+
+                if not app_path:
+                    return ExecutionResult(
+                        False,
+                        error=f"Application '{app_name}' not found"
+                    )
+
+            # Get app information using mdls (metadata list)
+            info_result = subprocess.run(
+                ["mdls", "-raw", "-name", "kMDItemCFBundleIdentifier", "-name", "kMDItemVersion",
+                 "-name", "kMDItemShortVersionString", "-name", "kMDItemKind",
+                 "-name", "kMDItemLastUsedDate", "-name", "kMDItemDateAdded", app_path],
+                capture_output=True,
+                text=True
+            )
+
+            # Initialize the app info dict with the path
+            app_info = {
+                'name': app_name,
+                'path': app_path
+            }
+
+            if info_result.returncode == 0:
+                # Parse the metadata
+                metadata_lines = info_result.stdout.strip().split('\n')
+
+                # Map the metadata fields to readable names
+                metadata_map = {
+                    'kMDItemCFBundleIdentifier': 'bundle_id',
+                    'kMDItemVersion': 'version',
+                    'kMDItemShortVersionString': 'short_version',
+                    'kMDItemKind': 'kind',
+                    'kMDItemLastUsedDate': 'last_used_date',
+                    'kMDItemDateAdded': 'date_added'
+                }
+
+                # Process the metadata lines to pair keys with values
+                i = 0
+                while i < len(metadata_lines):
+                    line = metadata_lines[i]
+                    if line.startswith('kMDItem'):
+                        key = line
+                        # Look for the next non-key line as the value
+                        j = i + 1
+                        while j < len(metadata_lines) and metadata_lines[j].startswith('kMDItem'):
+                            j += 1
+                        if j < len(metadata_lines):
+                            value = metadata_lines[j]
+                            readable_key = metadata_map.get(key, key.lower())
+                            app_info[readable_key] = value
+                    i += 1
+
+                return ExecutionResult(
+                    success=True,
+                    data={"app_info": app_info}
+                )
+            else:
+                # If mdls fails, try to get basic info from the Info.plist file
+                info_plist_path = os.path.join(app_path, "Contents", "Info.plist")
+                if os.path.exists(info_plist_path):
+                    # Use plutil to read plist information (macOS utility)
+                    try:
+                        plist_result = subprocess.run(
+                            ["plutil", "-extract", "CFBundleIdentifier", "raw", info_plist_path],
+                            capture_output=True,
+                            text=True
+                        )
+                        if plist_result.returncode == 0:
+                            app_info['bundle_id'] = plist_result.stdout.strip()
+
+                        plist_result = subprocess.run(
+                            ["plutil", "-extract", "CFBundleShortVersionString", "raw", info_plist_path],
+                            capture_output=True,
+                            text=True
+                        )
+                        if plist_result.returncode == 0:
+                            app_info['short_version'] = plist_result.stdout.strip()
+
+                        plist_result = subprocess.run(
+                            ["plutil", "-extract", "CFBundleVersion", "raw", info_plist_path],
+                            capture_output=True,
+                            text=True
+                        )
+                        if plist_result.returncode == 0:
+                            app_info['version'] = plist_result.stdout.strip()
+
+                        plist_result = subprocess.run(
+                            ["plutil", "-extract", "CFBundleName", "raw", info_plist_path],
+                            capture_output=True,
+                            text=True
+                        )
+                        if plist_result.returncode == 0:
+                            app_info['display_name'] = plist_result.stdout.strip()
+
+                    except Exception:
+                        # If plutil fails, at least we have the path
+                        pass
+
+                return ExecutionResult(
+                    success=True,
+                    data={"app_info": app_info}
+                )
+
+        except Exception as e:
+            return ExecutionResult(False, error=f"Failed to get app info for '{app_name}': {str(e)}")
