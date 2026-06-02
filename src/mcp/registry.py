@@ -28,6 +28,7 @@ class Registry:
         app.* -> macos_executor
         system.* -> macos_executor
         file.* -> macos_executor
+        media.* -> macos_executor
         interpreter.* -> interpreter_executor
         """
         prefix = capability_name.split('.')[0]
@@ -35,7 +36,7 @@ class Registry:
         if capability_name == "system.stop":
             return self._executors.get("system_executor")
             
-        if prefix in ["app", "system", "file", "keyboard", "mouse", "tts", "screen"]:
+        if prefix in ["app", "system", "file", "keyboard", "mouse", "tts", "screen", "media"]:
             return self._executors.get("macos_executor")
         elif prefix in ["interpreter", "math", "text"]:
             return self._executors.get("interpreter_executor")
@@ -47,5 +48,7 @@ class Registry:
             return self._executors.get("macos_executor")
         elif prefix in ["terminal"]:
             return self._executors.get("terminal_executor")
+        elif prefix in ["llm"]:
+            return self._executors.get("llm_executor")
             
         return None

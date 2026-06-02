@@ -68,7 +68,7 @@ class TerminalExecutor(BaseExecutor):
         return sanitized
 
     def execute(self, action: str, params: Dict[str, Any]) -> ExecutionResult:
-        if action != "terminal.run":
+        if action not in ["terminal.run", "terminal.execute"]:
              return ExecutionResult(False, error=f"Unknown Terminal action: {action}")
 
         command = params.get("command")

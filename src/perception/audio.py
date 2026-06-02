@@ -61,7 +61,8 @@ class AudioListener:
                         silence_start = time.time()
                     
                     if time.time() - silence_start > max_silence_seconds:
-                        print("\n[*] Silence detected. Processing...")
+                        # print("\n[*] Silence detected. Processing...") # REMOVED per user request
+                        print("") # Newline cleanest way to end the Volume bar line
                         break
                 else:
                     # Still waiting for speech, keep filling ring buffer

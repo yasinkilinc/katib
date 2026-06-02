@@ -31,6 +31,8 @@ class PolicyEngine:
             "tts.speak": PermissionLevel.LOW_RISK,
             "web.navigate": PermissionLevel.LOW_RISK, # Assuming harmless nav
             "system.stop": PermissionLevel.LOW_RISK, # User requested auto-approval
+            "media.control": PermissionLevel.LOW_RISK, # Auto-allow media control
+            "media.youtube": PermissionLevel.LOW_RISK, # Auto-allow YouTube control
             
             # LEVEL 2: Sensitive
             "app.open": PermissionLevel.SENSITIVE,

@@ -16,3 +16,4 @@ humanize
 python-dotenv
 jsonschema
 httpx
+pydantic>=2.0

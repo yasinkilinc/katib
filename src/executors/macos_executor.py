@@ -24,6 +24,10 @@ class MacOSExecutor(BaseExecutor):
             elif action == "web.close_tab":
                  # Fallback attempt via AppleScript
                 return self._close_browser_tab(params.get("title_match"))
+            elif action == "media.control":
+                return self._control_media(params.get("command"))
+            elif action == "media.youtube":
+                return self._control_youtube(params.get("command"))
             else:
                  return ExecutionResult(success=False, error=f"Unknown MacOS action: {action}")
         except Exception as e:
@@ -97,6 +101,7 @@ class MacOSExecutor(BaseExecutor):
                         close t
                         return "closed"
                     end if
+                    set i to i + 1
                 end repeat
             end repeat
         end tell
@@ -117,3 +122,55 @@ class MacOSExecutor(BaseExecutor):
             
         except Exception as e:
              return ExecutionResult(False, f"Browser control failed: {str(e)}")
+
+    def _control_media(self, command: str) -> ExecutionResult:
+        if not command: return ExecutionResult(False, error="Missing command")
+        
+        # Maps simple commands to AppleScript key codes or system events
+        # For Spotify/Apple Music control
+        
+        valid_cmds = ["play", "pause", "playpause", "next", "previous"]
+        if command not in valid_cmds:
+             return ExecutionResult(False, error=f"Invalid media command: {command}")
+             
+        script = ""
+        if command == "play": script = 'tell application "Spotify" to play'
+        elif command == "pause": script = 'tell application "Spotify" to pause'
+        elif command == "playpause": script = 'tell application "Spotify" to playpause'
+        elif command == "next": script = 'tell application "Spotify" to next track'
+        elif command == "previous": script = 'tell application "Spotify" to previous track'
+
+        try:
+             subprocess.run(["osascript", "-e", script])
+             return ExecutionResult(True, f"Media command '{command}' sent to Spotify")
+        except Exception as e:
+             return ExecutionResult(False, f"Media control failed: {e}")
+
+    def _control_youtube(self, command: str) -> ExecutionResult:
+        """
+        Controls YouTube playback via browser automation (Chrome)
+        Commands: play, pause, playpause
+        """
+        if not command: return ExecutionResult(False, error="Missing command")
+        
+        valid_cmds = ["play", "pause", "playpause"]
+        if command not in valid_cmds:
+            return ExecutionResult(False, error=f"Invalid YouTube command: {command}")
+        
+        # AppleScript to simulate 'k' key press in Chrome (YouTube play/pause shortcut)
+        # or Space bar
+        if command in ["play", "pause", "playpause"]:
+            script = '''
+            tell application "Google Chrome"
+                activate
+                tell application "System Events"
+                    keystroke "k"
+                end tell
+            end tell
+            '''
+            
+        try:
+            subprocess.run(["osascript", "-e", script])
+            return ExecutionResult(True, f"YouTube {command} executed")
+        except Exception as e:
+            return ExecutionResult(False, f"YouTube control failed: {e}")

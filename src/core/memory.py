@@ -4,7 +4,7 @@ import time
 from typing import Dict, Any
 
 class MemoryEngine:
-    def __init__(self, storage_path="memory.json"):
+    def __init__(self, storage_path="data/memory.json"):
         self.storage_path = storage_path
         self.history = []
         self._load()
@@ -18,6 +18,8 @@ class MemoryEngine:
                 self.history = []
 
     def _save(self):
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(self.storage_path), exist_ok=True)
         with open(self.storage_path, 'w') as f:
             json.dump(self.history, f, indent=2)
 
@@ -44,3 +46,8 @@ class MemoryEngine:
         
     def get_recent_context(self, limit=5):
         return self.history[-limit:]
+    
+    def get_successful_plans(self, limit=3):
+        """Return recent successful command-plan pairs for dynamic learning"""
+        successful = [entry for entry in self.history if entry.get("success")]
+        return successful[-limit:] if successful else []
